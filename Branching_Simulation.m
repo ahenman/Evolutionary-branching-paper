@@ -65,14 +65,14 @@ end
 %% Parameters
 C1 = 1;%2.5;%5*rand;
 C2 = 0;%2;%C1*rand;
-sigma = 0.5;%1;%needs to be less than 2.950390509 for branching
+sigma = 0.5;%1;
 sigma1 = 0.5;%0.5*rand;
 sigma2 = 0.35;%sigma1*sqrt(C2/C1)*rand; % condition for there to be 2 humps
 x0 = 1.5;%10;%1+5*rand;
 beta=0;
 r=rand+0.001;
 m=0.01; %max size of mutation
-eps = 1e-6; %fraction of population that mutates
+epsM = 1e-6; %fraction of population that mutates
 xmin=0;
 xmax=3;
 
@@ -109,12 +109,12 @@ end
 f2 = @(x1,x2,y) fit12(r,sigma,beta,C1,C2,sigma1,sigma2,x0,y,x1,x2);
 
 % fitness for n residents
-function fitn=fitn(r,sigma,beta,C1,C2,sigma1,sigma2,x0,y,traits)
+function fitn=fitn(r,sigma,beta,C1,C2,sigma1,sigma2,x0,Nvec,y,traits)
     A = alpha(y,traits,sigma,beta);
     Ky = K(C1,C2,sigma1,sigma2,x0,y);
-    Nvec = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta);
     fitn = r*(1-sum(A.*Nvec)./Ky);
 end
+fn = @(Nvec,y,traits) fitn(r,sigma,beta,C1,C2,sigma1,sigma2,x0,Nvec,y,traits);
 
 %% Selection gradient
 %selection gradient for branch with resident x1
@@ -363,103 +363,92 @@ hold on;
 legend("off");
 axis equal
 box on
-
+%}
 %% Numerical Simulation (up to n branches)
 
-numberofrealisations = 1; % number of sample paths
-T = 2000; % end time for simulation
+numberofrealisations = 5; % number of sample paths
+T = 100000; % end time for simulation
 xinitial = 1; %initial resident trait value
-% matrix to hold trait value at each timestep, for each realisation
-xplot = zeros(T+1,numberofrealisations);
-Nplot = zeros(T+1,numberofrealisations);
-timeplot = zeros(T+1,numberofrealisations);
+% matrix to hold trait values at each timestep, for each realisation for
+% each branch
+traitHistories = cell(numberofrealisations,1);%starts  with 1 for 1 branch
+densityHistories = cell(numberofrealisations,1);
+timeHistories = cell(numberofrealisations,1);
 for i = 1:numberofrealisations %Run numberofrealisations simulations
-    traits=xinitial;
-    Nlist=N1(xinitial);
+    traits=xinitial; %vector column of all current traits
+    Nlist=N1(xinitial); %vector column of all current densities
     time=0;
     j=1;
-    xplot(j,i)=x;       %To keep track of trait values for simulation i at "time" j
-    Nplot(j,i)=Nr;       %To keep track of population density for simulation i at "time" j
-    timeplot(j,i)=0;    %To keep track of time that trait x is obtained for simulation i
+    branch = 1; %initially 1 branch only
+    
+    %list of all traits and densities for all time
+    xplot = nan(T+1,1); %xplot(1,1)=trait value of branch 1 at time 0
+    Nplot = nan(T+1,1); %Nplot(T,5)=trait value of branch 5 at time T-1
+    %keeps track of time each trait/density held at
+    timeplot = nan(T+1,1);
+
+    xplot(j,1)=traits;       %To keep track of trait values at "time" j
+    Nplot(j,1)=Nlist;       %To keep track of population densities at "time" j
+    timeplot(j)=time;    %To keep track of time that trait x is obtained
     
     while time<T        %goes until specified time T
         %only runs for the trait value sufficiently far from x*
-        if branch==false
-            y = x+2*m*rand-m; %mutant value is resident +-random number <= m
-            if f(x,y) > 0
-                if f(y,x)>0
-                    xb=y; %update branch value if mutally invasive
-                    Nr=Nfun(x,xb);  %branch point affects both equilibrium densitities
-                    Nb=Nfun(xb,x);
-                    branch=true;
-                else
-                    x=y; %update trait value if y has positive invasion fitness
-                    xb=x;
-                    Nr=N1(x); %update new population
-                    Nb=Nr;
+        k = find(rand<=cumsum(Nlist./sum(Nlist)),1);%adds each density to fraction until it passes rand, this is the branch that mutates
+        x=traits(k);
+        y = x+m*(2*rand-1);
+        if fn(Nlist,y,traits)>0 %if y has a positive invasion fitness in environment of residents
+            swappedtrait = traits;
+            swappedtrait(k) = y; %replaces x with y
+            Nswapped = Nn(swappedtrait,C1,C2,sigma1,sigma2,x0,sigma,beta);
+            if fn(Nswapped,x,swappedtrait)>0 %if x has +ve f when mutant is resident
+                %we have mutual invasibility, add y to list of branches
+                traits = [traits;y];
+                branch = numel(traits);
+                if branch > size(xplot,2) %only add a column if needed, don't wipe an existing one
+                    xplot(:,branch)=nan;
+                    Nplot(:,branch)=nan;
                 end
+            else %not mutual invasibility
+                traits = swappedtrait;%y replaces x
             end
-        %This runs once we have got sufficiently close to "branching" point
-        else
-            if rand<=Nr/(Nr+Nb) %pick which subpopulation is mutating weighted by its frequency in the population
-                y = x+2*m*rand-m;
-                if f2(x,xb,y)>0
-                    x=y;
-                    Nr=Nfun(x,xb);
-                    Nb=Nfun(xb,x);
-                    %need to check mutations don't push traits outside of
-                    %mutualinvasibility zone
-                    if Nr<=0 %branch with trait x dies, only xb remains
-                        x=xb;
-                        Nr=N1(x);
-                        Nb=Nr;
-                        branch = false;
-                    elseif Nb<=0
-                        xb=x;
-                        Nr=N1(x);
-                        Nb=Nr;
-                        branch = false;
-                    end
-                end
-            else
-                yb = xb+2*m*rand-m;
-                if f2(x,xb,yb)>0
-                    xb=yb;
-                    Nr=Nfun(x,xb);
-                    Nb=Nfun(xb,x);
-                    if Nr<=0 %branch with trait x dies, only xb remains
-                        x=xb;
-                        Nr=N1(x);
-                        Nb=Nr;
-                        branch = false;
-                    elseif Nb<=0
-                        xb=x;
-                        Nr=N1(x);
-                        Nb=Nr;
-                        branch = false;
-                    end
-                end
-            end
+        %else x doesn't change
         end
-        time=time+1;%update timestep
+        Nnew = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta);%find new densities
+        extinct = Nnew<=0;%checks if any branches died
+        while any(extinct)
+            traits(extinct) = [];%remove extinct branches
+            Nnew = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta);%find new densities
+            extinct = Nnew<=0;%check again
+        end
+        Nlist = Nnew;
+        time=time+1%update timestep
         %update matrices
         j=j+1;
-        xplot(j,i)=x;
-        xbplot(j,i)=xb;
-        Nplot(j,i)=Nr;
-        Nbplot(j,i)=Nb;
-        timeplot(j,i)=time;
+        xplot(j,:)=nan;
+        Nplot(j,:)=nan;
+        branch=numel(traits);
+        for b=1:branch
+            xplot(j,b)=traits(b);
+            Nplot(j,b) = Nlist(b);
+        end
+        timeplot(j)=time;
     end
+    traitHistories{i} = xplot;
+    densityHistories{i} = Nplot;
+    timeHistories{i} = timeplot;
 end
 
 %Plotting
 figure;
-C = orderedcolors("gem");
 hold on;
 %plot trait value by time for each branch
-for i=1:size(xplot,2)
-    h=stairs(timeplot(:,i),xplot(:,i),'Color',C(mod(i,7)+1,:));
-    set(h,'Linewidth',2);
+for i=1:numberofrealisations
+    traitHistory = traitHistories{i};
+    timeHistory = timeHistories{i};
+    colour = C(mod(i,size(C,1))+1,:);
+    for b = 1:size(traitHistory,2)
+        plot(timeHistory,traitHistory(:,b),'.','Color',colour,'LineWidth',1);
+    end
 end
 hold on;
 %plots singular strategies
@@ -468,40 +457,7 @@ legend(Location="southeast")
 legend(hx1,sprintf('x* = %.2f', x1))
 xlabel('Time','FontSize',25);
 ylabel('Trait value','FontSize',25);
-axis([0 T 0 max(x0+1,xinitial)]);
-set(gca,'linewidth',1.5);
-set(gca,'FontSize',20);
-grid on;
-axis square;
-
-%pop dens
-figure;
-Cb = orderedcolors("glow");
-hold on;
-%plots population density of each branch over time
-for i=1:size(Nplot,2)
-    h=stairs(timeplot(:,i),Nplot(:,i),'Color',C(mod(i,7)+1,:));
-    set(h,'Linewidth',2);
-end
-hold on;
-xlabel('Time','FontSize',25);
-ylabel('Population Density','FontSize',25);
-set(gca,'linewidth',1.5);
-set(gca,'FontSize',20);
-grid on;
-axis square;
-
-%total pop dens
-figure;
-hold on;
-%plots population density of each branch over time
-for i=1:numberofrealisations
-    h=stairs(timeplot(:,i),Nplot(:,i)+Nbplot(:,i),'Color',C(mod(i,7)+1,:));
-    set(h,'Linewidth',2);
-end
-hold on;
-xlabel('Time','FontSize',25);
-ylabel('Population Density','FontSize',25);
+%axis([0 T 0 max(x0+1,xinitial)]);
 set(gca,'linewidth',1.5);
 set(gca,'FontSize',20);
 grid on;
@@ -510,6 +466,7 @@ axis square;
 
 %% ChatGPT sim
 
+%{
 % PARAMETERS FOR THE SIMULATION
 
 numberofrealisations = 3;
@@ -758,11 +715,7 @@ end
 
 % ECOLOGICAL ODE
 
-function dDdt = ecologicalODEGeneral( ...
-    t,...
-    densities,...
-    traits,...
-    C1,C2,sigma1,sigma2,x0,sigma,beta,r)
+function dDdt = ecologicalODEGeneral(t,densities,traits,C1,C2,sigma1,sigma2,x0,sigma,beta,r)
     % Competition matrix
     %
     % A(i,j) = alpha(trait_i,trait_j)
@@ -885,6 +838,8 @@ function [remainingTraits,remainingDensities,remainingBranchID] = ...
         end
     end
 end
+%}
+
 %% Branching video
 %{
  vidfile = VideoWriter('testmovie.mp4(1)','MPEG-4');
