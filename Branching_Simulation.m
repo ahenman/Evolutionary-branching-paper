@@ -4,7 +4,7 @@
 
 %%Default graphing layout from Denis
 set(0,'defaultTextFontName', 'Arial');
-set(0,'defaultaxesfontsize', 25); % 25 for 1X3, 20 for 1X2 figures
+set(0,'defaultaxesfontsize', 20); % 25 for 1X3, 20 for 1X2 figures
 %set(0,'defaultLegendInterpreter','latex');
 set(0,'defaultAxesTickLabelInterpreter','none');
 set(0,'defaulttextinterpreter','none');
@@ -18,24 +18,39 @@ C = orderedcolors("gem");
 %% functions
 
 %(Mexican hat) Wavelet Competition function
-function alpha=alpha(x,y,sigma,beta)
-    alpha = exp(sigma.^2.*beta.^2/2).* ...
-(1.-((x-y+sigma.^2.*beta)./sigma).^2).*exp(-(x-y+sigma.^2.*beta).^2./(2*sigma^2));
+function alpha=alpha(x,y,sigma,beta,gamma)
+    alpha = (1-gamma*((x-y)./sigma).^2).*exp(-(x-y).^2./(2*sigma.^2));
 end
 
 %dalpha(x-y)/dx, dalpha(y,x,...) = dalpha(y-x)/dy = -dalpha(y-x)/dx
-function dalpha=dalpha(x,y,sigma,beta)
-    dalpha = exp(sigma.^2.*beta.^2/2).* ...
-(-3+((x-y+sigma.^2.*beta)./sigma).^2).*exp(-(x-y+sigma.^2.*beta).^2./(2*sigma^2)).*(x-y+sigma.^2.*beta)./sigma.^2;
+function dalpha=dalpha(x,y,sigma,beta,gamma)
+    dalpha = (-1-2*gamma+gamma*((x-y)./sigma).^2).*exp(-(x-y).^2./(2*sigma.^2)).*(x-y)./sigma.^2;
 end
 %d^2alpha(x-y)/dx^2, ddalpha(y,x,...) = d^2alpha(y-x)/dy^2
-function ddalpha=ddalpha(x,y,sigma,beta)
-A = (x-y+sigma^2*beta);
-    ddalpha = exp(sigma.^2.*beta.^2/2-A.^2./(2*sigma^2)).* ...
-((-3+(A./sigma).^2)+ ...
-(A./sigma^2).^2.*(5-(A./sigma).^2));
+function ddalpha=ddalpha(x,y,sigma,beta,gamma)
+z = (x-y);
+    ddalpha = exp(-z.^2./(2*sigma.^2)).* ...
+(-1-2*gamma+(z./sigma).^2.*(1+5*gamma-gamma*(z./sigma).^2))./sigma.^2;
+end
+%{
+%(Mexican hat) Wavelet Competition function
+function alpha=alpha(x,y,sigma,beta,gamma)
+    alpha = exp(sigma.^2.*beta.^2/2).* ...
+(1-gamma*((x-y+sigma.^2.*beta)./sigma).^2).*exp(-(x-y+sigma.^2.*beta).^2./(2*sigma.^2));
 end
 
+%dalpha(x-y)/dx, dalpha(y,x,...) = dalpha(y-x)/dy = -dalpha(y-x)/dx
+function dalpha=dalpha(x,y,sigma,beta,gamma)
+    dalpha = exp(sigma.^2.*beta.^2/2).* ...
+(-1-2*gamma+gamma*((x-y+sigma.^2.*beta)./sigma).^2).*exp(-(x-y+sigma.^2.*beta).^2./(2*sigma.^2)).*(x-y+sigma.^2.*beta)./sigma.^2;
+end
+%d^2alpha(x-y)/dx^2, ddalpha(y,x,...) = d^2alpha(y-x)/dy^2
+function ddalpha=ddalpha(x,y,sigma,beta,gamma)
+z = (x-y+sigma^2*beta);
+    ddalpha = exp(sigma.^2.*beta.^2/2-z.^2./(2*sigma.^2)).* ...
+(-1-2*gamma+(z./sigma).^2.*(1+5*gamma-gamma*(z./sigma).^2))./sigma.^2;
+end
+%}
 %Gaussian centred on x0
 function Gauss=G(sigma,x0,x)
     Gauss = exp(-(x-x0).^2./(2*sigma^2));
@@ -65,76 +80,82 @@ end
 %% Parameters
 C1 = 1;%2.5;%5*rand;
 C2 = 0;%2;%C1*rand;
-sigma = 0.5;%1;
-sigma1 = 0.5;%0.5*rand;
+rho=1.5;
+sigma = 0.5*sqrt(rho);%sqrt(1.5/4.5);%A=(1+2gamma)/sigma^2=4.5>4
+sigma1 = 0.5;%sqrt(0.27/(1+2gamma))%sqrt(0.5/(1+2gamma))
 sigma2 = 0.35;%sigma1*sqrt(C2/C1)*rand; % condition for there to be 2 humps
 x0 = 1.5;%10;%1+5*rand;
 beta=0;
-r=rand+0.001;
+gamma=0.3;
+r=0.5;
 m=0.01; %max size of mutation
 epsM = 1e-6; %fraction of population that mutates
+xinitial=1; %initial resident trait value
 xmin=0;
 xmax=3;
 
 %% Equilibria
-N1 = @(x) K(C1,C2,sigma1,sigma2,x0,x)/alpha(0,0,sigma,beta); %1 resident equilibrium
+N1 = @(x) K(C1,C2,sigma1,sigma2,x0,x)/alpha(0,0,sigma,beta,gamma); %1 resident equilibrium
 %equilibrium for 2 residents 
 %The equilibrium pop density of resident with trait x1, swap x1 and x2 to
 %get pop dens of resident with trait x2
-function N = N(x1,C1,C2,sigma1,sigma2,x0,sigma,beta,x2)
-    N = (K(C1,C2,sigma1,sigma2,x0,x1).*alpha(0,0,sigma,beta)- ...
-        K(C1,C2,sigma1,sigma2,x0,x2).*alpha(x1,x2,sigma,beta))./( ...
-        alpha(0,0,sigma,beta).^2-alpha(x1,x2,sigma,beta).*alpha(x2,x1,sigma,beta));
+function N = N(x1,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,x2)
+    N = (K(C1,C2,sigma1,sigma2,x0,x1).*alpha(0,0,sigma,beta,gamma)- ...
+        K(C1,C2,sigma1,sigma2,x0,x2).*alpha(x1,x2,sigma,beta,gamma))./( ...
+        alpha(0,0,sigma,beta,gamma).^2-alpha(x1,x2,sigma,beta,gamma).*alpha(x2,x1,sigma,beta,gamma));
 end
-Nfun = @(x,xb) N(x,C1,C2,sigma1,sigma2,x0,sigma,beta,xb);
+Nfun = @(x,xb) N(x,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,xb);
 
 %popdens vector for n traits, traits must be a column vector [x1;x2;...;xn]
-function Nn = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta)
+function Nn = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma)
 
-    A = alpha(traits,traits.',sigma,beta);%vector Aij=alpha(xi-xj)
+    A = alpha(traits,traits.',sigma,beta,gamma);%vector Aij=alpha(xi-xj)
     Kvec = K(C1,C2,sigma1,sigma2,x0,traits);
     Kvec = Kvec(:);%turns Kvec into column vector
 
     Nn = A\Kvec; %finds vector N=[N1;N2;...Nn] by solving K=AN
+    if ~all(isfinite(Nn)) %A singular to working precision (e.g. a tight cluster of branches)
+        Nn = lsqminnorm(A,Kvec); %smallest solution of A*N=K, shares density within the cluster
+    end
 end
 %% Invasion fitness
-f = @(x,y) r*(1-alpha(y,x,sigma,beta).*K(C1,C2,sigma1,sigma2,x0,x) ...
-    ./(alpha(0,0,sigma,beta).*K(C1,C2,sigma1,sigma2,x0,y)));
+f = @(x,y) r*(1-alpha(y,x,sigma,beta,gamma).*K(C1,C2,sigma1,sigma2,x0,x) ...
+    ./(alpha(0,0,sigma,beta,gamma).*K(C1,C2,sigma1,sigma2,x0,y)));
 
 %fitness for 2 residents
-function fit12 =fit12(r,sigma,beta,C1,C2,sigma1,sigma2,x0,y,x1,x2)
-    fit12 = r*(1-(alpha(y,x1,sigma,beta).*N(x1,C1,C2,sigma1,sigma2,x0,sigma,beta,x2)+ ...
-        alpha(y,x2,sigma,beta).*N(x2,C1,C2,sigma1,sigma2,x0,sigma,beta,x1))./K(C1,C2,sigma1,sigma2,x0,y));
+function fit12 =fit12(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,y,x1,x2)
+    fit12 = r*(1-(alpha(y,x1,sigma,beta,gamma).*N(x1,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,x2)+ ...
+        alpha(y,x2,sigma,beta,gamma).*N(x2,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,x1))./K(C1,C2,sigma1,sigma2,x0,y));
 end
-f2 = @(x1,x2,y) fit12(r,sigma,beta,C1,C2,sigma1,sigma2,x0,y,x1,x2);
+f2 = @(x1,x2,y) fit12(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,y,x1,x2);
 
 % fitness for n residents
-function fitn=fitn(r,sigma,beta,C1,C2,sigma1,sigma2,x0,Nvec,y,traits)
-    A = alpha(y,traits,sigma,beta);
+function fitn=fitn(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,Nvec,y,traits)
+    A = alpha(y,traits,sigma,beta,gamma);
     Ky = K(C1,C2,sigma1,sigma2,x0,y);
     fitn = r*(1-sum(A.*Nvec)./Ky);
 end
-fn = @(Nvec,y,traits) fitn(r,sigma,beta,C1,C2,sigma1,sigma2,x0,Nvec,y,traits);
+fn = @(Nvec,y,traits) fitn(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,Nvec,y,traits);
 
 %% Selection gradient
 %selection gradient for branch with resident x1
-function secgrad1 = secgrad1(r,sigma,beta,C1,C2,sigma1,sigma2,x0,x1,x2)
-    secgrad1 = r*(-(dalpha(0,0,sigma,beta).*N(x1,C1,C2,sigma1,sigma2,x0,sigma,beta,x2)+ ...
-        dalpha(x1,x2,sigma,beta).*N(x2,C1,C2,sigma1,sigma2,x0,sigma,beta,x1))./K(C1,C2,sigma1,sigma2,x0,x1)+ ...
-        dK(C1,C2,sigma1,sigma2,x0,x1).*(alpha(0,0,sigma,beta).*N(x1,C1,C2,sigma1,sigma2,x0,sigma,beta,x2)+ ...
-        alpha(x1,x2,sigma,beta).*N(x2,C1,C2,sigma1,sigma2,x0,sigma,beta,x1))./K(C1,C2,sigma1,sigma2,x0,x1).^2);
+function secgrad1 = secgrad1(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,x1,x2)
+    secgrad1 = r*(-(dalpha(0,0,sigma,beta,gamma).*N(x1,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,x2)+ ...
+        dalpha(x1,x2,sigma,beta,gamma).*N(x2,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,x1))./K(C1,C2,sigma1,sigma2,x0,x1)+ ...
+        dK(C1,C2,sigma1,sigma2,x0,x1).*(alpha(0,0,sigma,beta,gamma).*N(x1,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,x2)+ ...
+        alpha(x1,x2,sigma,beta,gamma).*N(x2,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,x1))./K(C1,C2,sigma1,sigma2,x0,x1).^2);
 end
 
 %selection gradient for branch with resident x2
-function secgrad2 = secgrad2(r,sigma,beta,C1,C2,sigma1,sigma2,x0,x1,x2)
-    secgrad2 = r*(-(dalpha(x2,x1,sigma,beta).*N(x1,C1,C2,sigma1,sigma2,x0,sigma,beta,x2)+ ...
-        dalpha(0,0,sigma,beta).*N(x2,C1,C2,sigma1,sigma2,x0,sigma,beta,x1))./K(C1,C2,sigma1,sigma2,x0,x2)+ ...
-        dK(C1,C2,sigma1,sigma2,x0,x2).*(alpha(x2,x1,sigma,beta).*N(x1,C1,C2,sigma1,sigma2,x0,sigma,beta,x2)+ ...
-        alpha(0,0,sigma,beta).*N(x2,C1,C2,sigma1,sigma2,x0,sigma,beta,x1))./K(C1,C2,sigma1,sigma2,x0,x2).^2);
+function secgrad2 = secgrad2(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,x1,x2)
+    secgrad2 = r*(-(dalpha(x2,x1,sigma,beta,gamma).*N(x1,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,x2)+ ...
+        dalpha(0,0,sigma,beta,gamma).*N(x2,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,x1))./K(C1,C2,sigma1,sigma2,x0,x2)+ ...
+        dK(C1,C2,sigma1,sigma2,x0,x2).*(alpha(x2,x1,sigma,beta,gamma).*N(x1,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,x2)+ ...
+        alpha(0,0,sigma,beta,gamma).*N(x2,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,x1))./K(C1,C2,sigma1,sigma2,x0,x2).^2);
 end
 
-sx1 = @(x1,x2) secgrad1(r,sigma,beta,C1,C2,sigma1,sigma2,x0,x1,x2);
-sx2 = @(x1,x2) secgrad2(r,sigma,beta,C1,C2,sigma1,sigma2,x0,x1,x2);
+sx1 = @(x1,x2) secgrad1(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,x1,x2);
+sx2 = @(x1,x2) secgrad2(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,x1,x2);
 %Evolutionary singular strategies
 x1=x0;
 %x2=x0+sqrt(2*sigma1^2*sigma2^2*log(C1*sigma2^2/(C2*sigma1^2))/(sigma2^2-sigma1^2));
@@ -143,8 +164,9 @@ x1=x0;
 %% Numerical Simulation (up to 2 branches)
 
 %{
-numberofrealisations = 1; % number of sample paths
+numberofrealisations = 5;%12; % number of sample paths
 T = 2000; % end time for simulation
+m=0.01;
 xinitial = 1; %initial resident trait value
 % matrix to hold trait value at each timestep, for each realisation
 xplot = zeros(T+1,numberofrealisations);
@@ -256,10 +278,10 @@ hold on;
 for i=1:numberofrealisations
     h=stairs(timeplot(:,i),xplot(:,i),'Color',C(mod(i,7)+1,:));
     k=stairs(timeplot(:,i),xbplot(:,i),'Color',C(mod(i,7)+1,:));
-    set(h,'Linewidth',2);
-    set(k,'Linewidth',2);
+    set(h,'Linewidth',3);
+    set(k,'Linewidth',3);
 end
-mean(mean(abs(xplot(end-200:end,:)-xbplot(end-200:end,:)))) %finds mean separation between branches
+%mean(mean(abs(xplot(end-200:end,:)-xbplot(end-200:end,:)))) %finds mean separation between branches
 hold on;
 %plots singular strategies
 hx1=yline(x1,'--',LineWidth=2);
@@ -268,16 +290,18 @@ hx1=yline(x1,'--',LineWidth=2);
 legend(Location="southeast")
 %legend([hx2 hx1 hx3], {sprintf('x_0+x_1 = %.2f', x2), sprintf('x_0 = %.2f', x1), sprintf('x_0-x_1 = %.2f', x3)});
 %legend([hx1 hx3], {sprintf('x_0   = Repeller'), sprintf('x_0-x_1 = Branch point')});
-legend(hx1,sprintf('x* = %.2f', x1))
-xlabel('Time','FontSize',25);
-ylabel('Trait value','FontSize',25);
+%legend(hx1,sprintf('x* = %.2f', x1))
+legend(hx1,sprintf('x* = x_0'))
+xlabel('Time');
+ylabel('Trait value');
 axis([0 T 0 max(x0+1,xinitial)]);
 set(gca,'linewidth',1.5);
-set(gca,'FontSize',20);
 grid on;
 axis square;
+box on;
 
 %pop dens
+%{
 figure;
 Cb = orderedcolors("glow");
 hold on;
@@ -295,8 +319,9 @@ set(gca,'linewidth',1.5);
 set(gca,'FontSize',20);
 grid on;
 axis square;
-
+%}
 %total pop dens
+%{
 figure;
 hold on;
 %plots population density of each branch over time
@@ -311,9 +336,9 @@ set(gca,'linewidth',1.5);
 set(gca,'FontSize',20);
 grid on;
 axis square;
-
+%}
 %trait evolution on a TEP
-
+%{
 z=linspace(xmin,xmax,2000);
 [X1,X2] = meshgrid(z, z);
 
@@ -322,7 +347,7 @@ F2 = f(X2,X1); %x2 resident, x1 mutant
 S1 = sx1(X1,X2);
 S2 = sx2(X1,X2);
 %selection gradient
-sx = @(x) r*(-dalpha(0,0,sigma,beta0)./alpha(0,0,sigma,beta0)+dK(C1,C2,sigma1,sigma2,x0,x) ...
+sx = @(x) r*(-dalpha(0,0,sigma,beta,gamma)./alpha(0,0,sigma,beta,gamma)+dK(C1,C2,sigma1,sigma2,x0,x) ...
     ./K(C1,C2,sigma1,sigma2,x0,x));
 xstar=roots(chebfun(sx,[1e-6 5])); %singular strategies
 
@@ -364,16 +389,20 @@ legend("off");
 axis equal
 box on
 %}
+%}
 %% Numerical Simulation (up to n branches)
-
-numberofrealisations = 5; % number of sample paths
-T = 100000; % end time for simulation
-xinitial = 1; %initial resident trait value
+%
+numberofrealisations = 1; % number of sample paths
+T = 5e5; % end time for simulation
 % matrix to hold trait values at each timestep, for each realisation for
 % each branch
 traitHistories = cell(numberofrealisations,1);%starts  with 1 for 1 branch
 densityHistories = cell(numberofrealisations,1);
 timeHistories = cell(numberofrealisations,1);
+ws = warning('off','MATLAB:nearlySingularMatrix');%to stop flooding command window
+numberofpoints = min(T,5e4);%5;%
+stride = max(1,floor((T+1)/numberofpoints)); %plot at most ~50000 time points
+numberofrows = floor(T/stride) + 1;
 for i = 1:numberofrealisations %Run numberofrealisations simulations
     traits=xinitial; %vector column of all current traits
     Nlist=N1(xinitial); %vector column of all current densities
@@ -382,10 +411,10 @@ for i = 1:numberofrealisations %Run numberofrealisations simulations
     branch = 1; %initially 1 branch only
     
     %list of all traits and densities for all time
-    xplot = nan(T+1,1); %xplot(1,1)=trait value of branch 1 at time 0
-    Nplot = nan(T+1,1); %Nplot(T,5)=trait value of branch 5 at time T-1
+    xplot = nan(numberofrows,1); %xplot(1,1)=trait value of branch 1 at time 0
+    Nplot = nan(numberofrows,1); %Nplot(T,5)=trait value of branch 5 at time T-1
     %keeps track of time each trait/density held at
-    timeplot = nan(T+1,1);
+    timeplot = nan(numberofrows,1);
 
     xplot(j,1)=traits;       %To keep track of trait values at "time" j
     Nplot(j,1)=Nlist;       %To keep track of population densities at "time" j
@@ -399,7 +428,7 @@ for i = 1:numberofrealisations %Run numberofrealisations simulations
         if fn(Nlist,y,traits)>0 %if y has a positive invasion fitness in environment of residents
             swappedtrait = traits;
             swappedtrait(k) = y; %replaces x with y
-            Nswapped = Nn(swappedtrait,C1,C2,sigma1,sigma2,x0,sigma,beta);
+            Nswapped = Nn(swappedtrait,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma);
             if fn(Nswapped,x,swappedtrait)>0 %if x has +ve f when mutant is resident
                 %we have mutual invasibility, add y to list of branches
                 traits = [traits;y];
@@ -413,66 +442,209 @@ for i = 1:numberofrealisations %Run numberofrealisations simulations
             end
         %else x doesn't change
         end
-        Nnew = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta);%find new densities
-        extinct = Nnew<=0;%checks if any branches died
-        while any(extinct)
-            traits(extinct) = [];%remove extinct branches
-            Nnew = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta);%find new densities
-            extinct = Nnew<=0;%check again
+        Nnew = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma);%find new densities
+        %this method ensures the branch removed was the correct choice
+        %(one negative N means the eqm system is wrong not just that it should be removed)
+        removed = []; %traits of branches removed this step
+        for pass = 1:50 %cap on passes, in case near-twins flip back and forth
+            while any(Nnew<=0) %checks if any branches died
+                [~,w] = min(Nnew);              %remove only the most negative branch,
+                removed = [removed; traits(w)]; %others may survive once it's gone
+                traits(w) = [];
+                Nnew = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma);%find new densities
+            end
+            if isempty(removed), break; end
+            fitBack = arrayfun(@(z) fn(Nnew,z,traits), removed); %could a removed branch grow back?
+            [fbest,w] = max(fitBack);
+            if fbest <= 1e-6, break; end        %no (ignoring rounding-level twin cases)
+            traits = [traits; removed(w)];      %yes: put it back and re-solve
+            removed(w) = [];
+            Nnew = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma);
         end
+        while any(Nnew<=0) %checks if any branches died
+            [~,w] = min(Nnew);              %remove only the most negative branch,
+            traits(w) = [];
+            Nnew = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma);%find new densities
+        end
+        %
         Nlist = Nnew;
-        time=time+1%update timestep
-        %update matrices
-        j=j+1;
-        xplot(j,:)=nan;
-        Nplot(j,:)=nan;
-        branch=numel(traits);
-        for b=1:branch
-            xplot(j,b)=traits(b);
-            Nplot(j,b) = Nlist(b);
+        time=time+1;%update timestep
+        if mod(time,500000)==0, fprintf('\n %.3f',100*time/T); end %progress every 5000 steps
+        %update matrices (reduces points being stored)
+        if mod(time,stride)==0
+            j=j+1;
+            xplot(j,:)=nan;
+            Nplot(j,:)=nan;
+            branch=numel(traits);
+            for b=1:branch
+                xplot(j,b)=traits(b);
+                Nplot(j,b) = Nlist(b);
+            end
+            timeplot(j)=time;
         end
-        timeplot(j)=time;
+        
     end
-    traitHistories{i} = xplot;
-    densityHistories{i} = Nplot;
-    timeHistories{i} = timeplot;
+    traitHistories{i} = xplot(1:j,:);
+    densityHistories{i} = Nplot(1:j,:);
+    timeHistories{i} = timeplot(1:j);
 end
 
 %Plotting
+
+tol=0.1;
+%merges traits closer than tol into one: density = sum, trait = density-weighted mean
+function [xc,Nc] = mergeClose(x,N,tol)
+    [x,o] = sort(x(:)); N = N(o); N = N(:);
+    edges = [0; find(diff(x) > tol); numel(x)]; %a gap bigger than tol starts a new cluster
+    nc = numel(edges)-1;
+    xc = zeros(nc,1); Nc = zeros(nc,1);
+    for k = 1:nc
+        idx = edges(k)+1:edges(k+1);
+        Nc(k) = sum(N(idx));
+        xc(k) = sum(x(idx).*N(idx))/Nc(k);
+    end
+end
+
 figure;
 hold on;
+cmap=jet;
 %plot trait value by time for each branch
+%{
+for i=1:numberofrealisations
+    X = traitHistories{i}; Nh = densityHistories{i}; t = timeHistories{i};
+    tp = nan(numel(X),1); xp = tp; np = tp; c = 0; %preallocated, filled row by row
+    for j = 1:size(X,1)
+        keep = ~isnan(X(j,:));
+        if isnan(t(j)) || ~any(keep), continue, end
+        [xc,Nc] = mergeClose(X(j,keep),Nh(j,keep),tol);
+        n = numel(xc);
+        tp(c+1:c+n) = t(j); xp(c+1:c+n) = xc; np(c+1:c+n) = Nc; c = c+n;
+    end
+    %scatter(tp(1:c),xp(1:c),4,log10(np(1:c)),"filled");
+    scatter(tp(1:c),xp(1:c),4,log10(np(1:c)./K(C1,C2,sigma1,sigma2,x0,xp(1:c))),"filled");
+end
+colormap("turbo");
+cb=colorbar;
+%cb.Label.String = "log(Density)";
+cb.Label.String = "log(Density/K)";
+%}
+%
 for i=1:numberofrealisations
     traitHistory = traitHistories{i};
     timeHistory = timeHistories{i};
+    densityHistory = densityHistories{i};
     colour = C(mod(i,size(C,1))+1,:);
-    for b = 1:size(traitHistory,2)
-        plot(timeHistory,traitHistory(:,b),'.','Color',colour,'LineWidth',1);
-    end
+    tt = repmat(timeHistory,1,size(traitHistory,2)); %matching time for every branch column
+    plot(tt(:),traitHistory(:),'.','Color',colour,'MarkerSize',4); %one object for all branches
 end
-hold on;
+%}
 %plots singular strategies
 hx1=yline(x0,'--',LineWidth=2);
-legend(Location="southeast")
-legend(hx1,sprintf('x* = %.2f', x1))
-xlabel('Time','FontSize',25);
-ylabel('Trait value','FontSize',25);
+legend(Location="southwest")
+legend(hx1,sprintf('x* = x_0'))
+xlabel('Time');
+ylabel('Trait value');
+xlim([0 T]);
 %axis([0 T 0 max(x0+1,xinitial)]);
-set(gca,'linewidth',1.5);
-set(gca,'FontSize',20);
 grid on;
 axis square;
 %}
+%% N/K by xi
+%
+figure;
+hold on;
+%k=11000;%170,350,600,2000,3000,4000,5000
+for i=1:numberofrealisations
+    traitHistory=traitHistories{i};
+    densityHistory=densityHistories{i};
+    keep=~isnan(traitHistory(end,:));
+    finalx=traitHistory(end,keep);
+    %finalsep=diff(sort(finalx));
+    %finalsep=finalsep(finalsep>0.1);
+    %mean(finalsep)
+    %range(finalsep)
+    finalN=densityHistory(end,keep);
+    stem(finalx,finalN./K(C1,C2,sigma1,sigma2,x0,finalx),'filled','LineWidth',1.5);
+end
+xlabel("Final trait values of each branch (x_i)","Interpreter","tex");
+ylabel("Relative density (N(x_i,t)/K(x_i))","Interpreter","tex");
+%}
+%% Neff by xi
+%{
+function Neff = Neff(allx,allN,sigma,beta,gamma)
+    Neff=nan(size(allx));
+    for i=1:numel(allx)
+        Neff(i)=sum(alpha(allx(i),allx,sigma,beta,gamma).*allN)-alpha(0,0,sigma,beta,gamma).*allN(i);
+    end
+end
+figure;
+hold on;
+for i=1:numberofrealisations
+    traitHistory=traitHistories{i};
+    densityHistory=densityHistories{i};
+    keep=~isnan(traitHistory(k,:));
+    finalx=traitHistory(k,keep);
+    finalN=densityHistory(k,keep);
+    stem(finalx,Neff(finalx,finalN,sigma,beta,gamma),'filled','LineWidth',1.5);
+end
+xlabel("Final trait values of each branch (x_i)","Interpreter","tex");
+ylabel("Effective density (N_{eff}(x_i, t))","Interpreter","tex");
+%}
+%% histogram for branch separation
+%{
+allsep=[];
+allsep3=[];
+allsep6=[];
+allsep9=[];
+allsep12=[];
+allsep15=[];
+for i=1:numberofrealisations
+    traitHistory = traitHistories{i};
+    %{
+    sep3=diff(sort(traitHistory(2,~isnan(traitHistory(2,:)))));
+    sep6=diff(sort(traitHistory(3,~isnan(traitHistory(3,:)))));
+    sep9=diff(sort(traitHistory(4,~isnan(traitHistory(4,:)))));
+    sep12=diff(sort(traitHistory(5,~isnan(traitHistory(5,:)))));
+    sep15=diff(sort(traitHistory(6,~isnan(traitHistory(6,:)))));
+    %}
+    %sep = diff(sort(traitHistory(end,~isnan(traitHistory(end,:)))));
+    %allsep=[allsep,sep(sep>0.01)];
+    allsep3=[allsep3,sep3(sep3>0.01)];
+    allsep6=[allsep6,sep6(sep6>0.01)];
+    allsep9=[allsep9,sep9(sep9>0.01)];
+    allsep12=[allsep12,sep12(sep12>0.01)];
+    allsep15=[allsep15,sep15(sep15>0.01)];
+end
+figure;
+tiledlayout(5,1)
+hmin = min([allsep3 allsep6 allsep9 allsep12 allsep15]);
+hmax = max([allsep3 allsep6 allsep9 allsep12 allsep15]);
+%histogram(allsep,"BinWidth",0.001);
+nexttile
+histogram(allsep3,"BinWidth",0.05);
+xlim([hmin hmax]);
+nexttile
+%hold on;
+histogram(allsep6,"BinWidth",0.05);
+xlim([hmin hmax]);
+nexttile
+histogram(allsep9,"BinWidth",0.05);
+xlim([hmin hmax]);
+nexttile
+histogram(allsep12,"BinWidth",0.05);
+xlim([hmin hmax]);
+nexttile
+histogram(allsep15,"BinWidth",0.05);
+xlim([hmin hmax]);
 
-%% ChatGPT sim
+%}
+%% ODE N sim (very slow)
 
 %{
 % PARAMETERS FOR THE SIMULATION
 
-numberofrealisations = 3;
-m = 0.05;                 % maximum mutation step
-T = 400;                % total evolutionary time
-epsM = 1e-6;              % initial mutant density relative to parent
+numberofrealisations = 1;
+T = 500;                % total evolutionary time
 TecoStart = 100;          % initial ecological integration time
 tolEco = 1e-10;           % tolerance for ecological equilibrium
 maxEcoExtensions = 10;   % maximum times to extend ecological integration
@@ -487,8 +659,6 @@ odeOptionsBase = odeset( ...
 traitHistories = cell(numberofrealisations,1);
 densityHistories = cell(numberofrealisations,1);
 timeHistories = cell(numberofrealisations,1);
-parentHistories = cell(numberofrealisations,1);
-birthTimeHistories = cell(numberofrealisations,1);
 finalTraitValues = cell(numberofrealisations,1);
 finalDensityValues = cell(numberofrealisations,1);
 
@@ -508,19 +678,8 @@ for realisation = 1:numberofrealisations
     densities = getEquilibriumDensities( ...
         traits,...
         initialDensities,...
-        C1,C2,sigma1,sigma2,x0,sigma,beta,r,...
+        C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,r,...
         TecoStart,tolEco,maxEcoExtensions,odeOptionsBase);
-
-    % BRANCH IDs
-    % The original resident is branch 1
-    branchID = 1;
-    % The next new branch will receive this ID
-    nextID = 2;
-    % Parent of every branch
-    % parentOf(1) = 0 because branch 1 is the original resident
-    parentOf = 0;
-    % Evolutionary time at which each branch first appeared
-    birthTime = 0;
 
     % HISTORY ARRAYS
     % Maximum possible number of evolutionary time steps
@@ -534,8 +693,8 @@ for realisation = 1:numberofrealisations
     % RECORD INITIAL STATE
     step = 1;
     time = 0;
-    traitHistory(step,branchID) = traits;
-    densityHistory(step,branchID) = densities;
+    traitHistory(step,1) = traits;
+    densityHistory(step,1) = densities;
     timeHistory(step) = time;
 
     % EVOLUTIONARY SIMULATION
@@ -545,11 +704,11 @@ for realisation = 1:numberofrealisations
         % population.
         mutationProbability = densities ./ sum(densities);
         cumulativeProbability = cumsum(mutationProbability);
+        cumulativeProbability(end)=1;
         parentIndex = find(rand <= cumulativeProbability,1);
 
         % Trait of the branch that produced the mutant
         parentTrait = traits(parentIndex);
-        parentBranchID = branchID(parentIndex);
 
         % GENERATE MUTANT
         % Mutant lies uniformly within +/- m of parent trait
@@ -560,13 +719,11 @@ for realisation = 1:numberofrealisations
             mutantTrait,...
             traits,...
             densities,...
-            C1,C2,sigma1,sigma2,x0,sigma,beta,r);
+            C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,r);
 
         % MUTANT CAN ONLY ESTABLISH IF ITS INVASION FITNESS IS POSITIVE
         if invasionFitnessValue > 0
             % TEMPORARILY ADD MUTANT TO THE COMMUNITY
-            % Give the mutant a new permanent ID
-            newBranchID = nextID;
             % Add mutant to the list of resident traits
             trialTraits = [traits; mutantTrait];
             % Existing branches retain their current densities.
@@ -574,37 +731,19 @@ for realisation = 1:numberofrealisations
             % Mutant starts at a very small density.
             mutantInitialDensity = epsM * densities(parentIndex);
             trialDensities0 = [densities; mutantInitialDensity];
-            % IDs corresponding to trialTraits
-            trialBranchID = [branchID; newBranchID];
 
             % RUN ECOLOGICAL DYNAMICS WITH MUTANT INCLUDED
-            [trialTraits,trialDensities,trialBranchID] = ...
+            [trialTraits,trialDensities] = ...
                 getEquilibriumWithExtinction( ...
                 trialTraits,...
                 trialDensities0,...
-                trialBranchID,...
-                C1,C2,sigma1,sigma2,x0,sigma,beta,r,...
+                C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,r,...
                 TecoStart,tolEco,maxEcoExtensions,...
                 extinctionTol,odeOptionsBase);
 
             % ACCEPT THE NEW ECOLOGICAL STATE
             traits = trialTraits;
             densities = trialDensities;
-            branchID = trialBranchID;
-
-            % CHECK WHETHER THE NEW MUTANT SURVIVED
-            newBranchSurvives = any(branchID == newBranchID);
-            if newBranchSurvives
-                % Create a new history column filled with NaNs
-                traitHistory(:,newBranchID) = NaN;
-                densityHistory(:,newBranchID) = NaN;
-                % The new branch now permanently exists
-                nextID = nextID + 1;
-                % Record which branch produced it
-                parentOf(newBranchID) = parentBranchID;
-                % Record when it appeared
-                birthTime(newBranchID) = time + 1;
-            end
         end
 
         % ADVANCE EVOLUTIONARY TIME
@@ -613,12 +752,14 @@ for realisation = 1:numberofrealisations
         % RECORD THE CURRENT STATE
         % Clear this row first.
         % This means extinct branches become NaN from this point onward.
-        traitHistory(step+1,:) = nan;
-        densityHistory(step+1,:) = nan;
+        if numel(traits) > size(traitHistory,2) %add a column only if needed, filled with NaN not 0
+            traitHistory(:,end+1:numel(traits)) = nan;
+            densityHistory(:,end+1:numel(traits)) = nan;
+        end
 
         % Put every currently existing branch in its permanent column
-        traitHistory(step+1,branchID) = traits;
-        densityHistory(step+1,branchID) = densities;
+        traitHistory(step+1,1:numel(traits)) = traits;
+        densityHistory(step+1,1:numel(traits)) = densities;
         % Record time
         timeHistory(step+1) = time;
         % Move to next row
@@ -635,8 +776,6 @@ for realisation = 1:numberofrealisations
     traitHistories{realisation} = traitHistory;
     densityHistories{realisation} = densityHistory;
     timeHistories{realisation} = timeHistory;
-    parentHistories{realisation} = parentOf;
-    birthTimeHistories{realisation} = birthTime;
 
     % SAVE FINAL STATE
     finalTraitValues{realisation} = traits;
@@ -654,18 +793,19 @@ for realisation = 1:numberofrealisations
     % Use the same colour for all branches belonging to the same
     % realisation
     colour = C(mod(realisation-1,size(C,1))+1,:);
-    % Every column corresponds to one permanent branch ID
     for branch = 1:size(traitHistory,2)
-        stairs( ...
+        plot( ...
             timeHistory,...
-            traitHistory(:,branch),...
+            traitHistory(:,branch),'.',...
             'Color',colour,...
             'LineWidth',1);
     end
 end
 xlabel('Time');
-ylabel('Trait');
-box on;
+ylabel('Trait value');
+yline(x0,'--',LineWidth=2);
+grid on;
+axis square;
 hold off;
 
 % PLOT POPULATION DENSITIES USING STAIRS
@@ -676,9 +816,9 @@ for realisation = 1:numberofrealisations
     timeHistory = timeHistories{realisation};
     colour = C(mod(realisation-1,size(C,1))+1,:);
     for branch = 1:size(densityHistory,2)
-        stairs( ...
+        plot( ...
             timeHistory,...
-            densityHistory(:,branch),...
+            densityHistory(:,branch),'.',...
             'Color',colour,...
             'LineWidth',1);
     end
@@ -697,13 +837,13 @@ function s = calcInvasionFitness( ...
     mutantTrait,...
     traits,...
     densities,...
-    C1,C2,sigma1,sigma2,x0,sigma,beta,r)
+    C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,r)
     % Carrying capacity of the mutant
     mutantK = K( ...
         C1,C2,sigma1,sigma2,x0,mutantTrait);
     % Competition exerted on the mutant by EVERY resident
     competitionFromResidents = ...
-        alpha(mutantTrait,traits,sigma,beta) .* densities;
+        alpha(mutantTrait,traits,sigma,beta,gamma) .* densities;
     % Integral approximated by a sum
     totalCompetition = sum(competitionFromResidents);
     % Invasion fitness
@@ -715,12 +855,12 @@ end
 
 % ECOLOGICAL ODE
 
-function dDdt = ecologicalODEGeneral(t,densities,traits,C1,C2,sigma1,sigma2,x0,sigma,beta,r)
+function dDdt = ecologicalODEGeneral(t,densities,traits,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,r)
     % Competition matrix
     %
     % A(i,j) = alpha(trait_i,trait_j)
     competitionMatrix = ...
-        alpha(traits,traits.',sigma,beta);
+        alpha(traits,traits.',sigma,beta,gamma);
     % Carrying capacity of every resident
     Kvec = K( ...
         C1,C2,sigma1,sigma2,x0,traits);
@@ -736,7 +876,7 @@ end
 function equilibriumDensities = getEquilibriumDensities( ...
     traits,...
     initialDensities,...
-    C1,C2,sigma1,sigma2,x0,sigma,beta,r,...
+    C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,r,...
     TecoStart,tolEco,maxEcoExtensions,odeOptionsBase)
     % Make sure both are columns
     traits = traits(:);
@@ -757,7 +897,7 @@ function equilibriumDensities = getEquilibriumDensities( ...
                 t,...
                 densities,...
                 traits,...
-                C1,C2,sigma1,sigma2,x0,sigma,beta,r),...
+                C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,r),...
             [0 Teco],...
             initialDensities,...
             odeOptions);
@@ -769,7 +909,7 @@ function equilibriumDensities = getEquilibriumDensities( ...
             0,...
             equilibriumDensities,...
             traits,...
-            C1,C2,sigma1,sigma2,x0,sigma,beta,r);
+            C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,r);
         % Measure how far we are from equilibrium
         equilibriumError = max(abs(dDdt));
         % Stop if sufficiently close to equilibrium
@@ -789,18 +929,16 @@ end
 
 % ECOLOGICAL EQUILIBRIUM WHILE REMOVING EXTINCT BRANCHES
 
-function [remainingTraits,remainingDensities,remainingBranchID] = ...
+function [remainingTraits,remainingDensities] = ...
     getEquilibriumWithExtinction( ...
     traits,...
     initialDensities,...
-    branchID,...
-    C1,C2,sigma1,sigma2,x0,sigma,beta,r,...
+    C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,r,...
     TecoStart,tolEco,maxEcoExtensions,...
     extinctionTol,odeOptionsBase)
     % Force vectors to be columns
     traits = traits(:);
     initialDensities = initialDensities(:);
-    branchID = branchID(:);
     while true
 
         % FIND ECOLOGICAL EQUILIBRIUM
@@ -808,7 +946,7 @@ function [remainingTraits,remainingDensities,remainingBranchID] = ...
         equilibriumDensities = getEquilibriumDensities( ...
             traits,...
             initialDensities,...
-            C1,C2,sigma1,sigma2,x0,sigma,beta,r,...
+            C1,C2,sigma1,sigma2,x0,sigma,beta,gamma,r,...
             TecoStart,tolEco,maxEcoExtensions,...
             odeOptionsBase);
 
@@ -820,20 +958,17 @@ function [remainingTraits,remainingDensities,remainingBranchID] = ...
         if ~any(extinct)
             remainingTraits = traits;
             remainingDensities = equilibriumDensities;
-            remainingBranchID = branchID;
             return
         end
 
         % REMOVE EXTINCT BRANCHES
         traits(extinct) = [];
-        branchID(extinct) = [];
         initialDensities = ...
             equilibriumDensities(~extinct);
         % CHECK WHETHER ANY BRANCHES REMAIN
         if isempty(traits)
             remainingTraits = [];
             remainingDensities = [];
-            remainingBranchID = [];
             return
         end
     end
