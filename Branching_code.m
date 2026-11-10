@@ -1,6 +1,5 @@
 %%Alice Henman%%
-%%Evolutionary Branching in Models for Symmetric and Asymmetric
-%%Competition%%
+%%Evolutionary Branching in Models for Symmetric Competition%%
 
 %%Default graphing layout from Denis
 set(0,'defaultTextFontName', 'Arial');

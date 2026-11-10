@@ -17,15 +17,15 @@ C = orderedcolors("gem12");
 %% parameters
 r=1;
 x0 = 1.5;
-sigmak = 0.5;
-sigma = sigmak*sqrt(1.5);
-gamma = 0.3;
+sigmak = 0.1/sqrt(2.5);%sigma/sqrt(rho)
+sigma = 0.1;%sigmak*sqrt(1.5);
+gamma = 1;
 nT=1; %threshold population
 ai=0.1;
 C1 = nT/ai;
 I=0.004;
-xmax = 38.6*sigmak+x0;%4*sigmak+x0;%1;%
-xmin = x0-38.6*sigmak;%x0-4*sigmak;%0;%
+xmax = 4*sigmak+x0;%38.6*sigmak+x0;%1;%
+xmin = x0-4*sigmak;%x0-38.6*sigmak;%0;%
 L=xmax-xmin; %length of domain
 numspecies = 200;
 T = 5e5;%1e4;%
@@ -129,13 +129,15 @@ end
 
 %% plotting final trait distribution
 figure;
-stem(x, n, 'filled', 'LineWidth', 1.5);
+stem(x(:), n(:), 'filled', 'LineWidth', 1.5);
 xlabel('Niche position x'); ylabel('Population n');
 xlim([xmin xmax]);
 
 %% plotting traits over time
+%
 figure;
 scatter(vertcat(tvals{:}), vertcat(xvals{:}), 4, log(vertcat(nvals{:})), 'filled');
 colormap turbo; cb = colorbar; ylabel(cb, 'log(Density)');
 xlabel('Time'); ylabel('Niche position x');
 xline(T/2, 'k--', 'Immigration off', 'LineWidth', 1.5);
+%}

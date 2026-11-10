@@ -1,6 +1,5 @@
 %%Alice Henman%%
-%%Evolutionary Branching in Models for Symmetric and Asymmetric
-%%Competition%%
+%%Evolutionary Branching in Models for Symmetric Competition%%
 
 %%Default graphing layout from Denis
 set(0,'defaultTextFontName', 'Arial');
@@ -80,13 +79,13 @@ end
 %% Parameters
 C1 = 1;%2.5;%5*rand;
 C2 = 0;%2;%C1*rand;
-rho=1.5;
+rho=0.5;
 sigma = 0.5*sqrt(rho);%sqrt(1.5/4.5);%A=(1+2gamma)/sigma^2=4.5>4
 sigma1 = 0.5;%sqrt(0.27/(1+2gamma))%sqrt(0.5/(1+2gamma))
 sigma2 = 0.35;%sigma1*sqrt(C2/C1)*rand; % condition for there to be 2 humps
 x0 = 1.5;%10;%1+5*rand;
 beta=0;
-gamma=0.3;
+gamma=0.6;
 r=0.5;
 m=0.01; %max size of mutation
 epsM = 1e-6; %fraction of population that mutates
@@ -137,6 +136,14 @@ function fitn=fitn(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,Nvec,y,traits)
 end
 fn = @(Nvec,y,traits) fitn(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,Nvec,y,traits);
 
+%produces a vector of the values of fyy*K(x) at each branch value
+function fityyn = fityyn(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,Nvec,traits)
+    ddA = ddalpha(traits,traits.',sigma,beta,gamma);
+    ddKx = ddK(C1,C2,sigma1,sigma2,x0,traits);
+    Kx = K(C1,C2,sigma1,sigma2,x0,traits);
+    fityyn = r*(ddKx-ddA*Nvec);
+end
+
 %% Selection gradient
 %selection gradient for branch with resident x1
 function secgrad1 = secgrad1(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,x1,x2)
@@ -160,6 +167,27 @@ sx2 = @(x1,x2) secgrad2(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,x1,x2);
 x1=x0;
 %x2=x0+sqrt(2*sigma1^2*sigma2^2*log(C1*sigma2^2/(C2*sigma1^2))/(sigma2^2-sigma1^2));
 %x3=x0-sqrt(2*sigma1^2*sigma2^2*log(C1*sigma2^2/(C2*sigma1^2))/(sigma2^2-sigma1^2));
+
+%produces a vector of the values of s(x) at each branch value, using observed N
+function secgradn = secgradn(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,Nvec,traits)
+    dKx = dK(C1,C2,sigma1,sigma2,x0,traits);
+    dA = dalpha(traits,traits.',sigma,beta,gamma);
+    secgradn = r*(dKx - dA*Nvec);
+end
+
+%produces a vector of the values of s(x) at each branch value, calculating N
+function sxn_fun = sxn_fun(X, r, sigma, beta, gamma, C1, C2, sigma1,sigma2, x0)
+    X  = X(:);
+    A  = alpha(X,X.',sigma,beta,gamma);
+    dA = dalpha(X,X.',sigma,beta,gamma);
+    Kx = K(C1,C2,sigma1,sigma2,x0,X);
+    dKx = dK(C1,C2,sigma1,sigma2,x0,X);
+    Nn = A\Kx; %finds vector N=[N1;N2;...Nn] by solving K=AN
+    if ~all(isfinite(Nn)) %A singular to working precision (e.g. a tight cluster of branches)
+        Nn = lsqminnorm(A,Kx); %smallest solution of A*N=K, shares density within the cluster
+    end
+    sxn_fun  = r*(dKx - dA*Nn);        % = K .* s(x)
+end
 
 %% Numerical Simulation (up to 2 branches)
 
@@ -393,19 +421,20 @@ box on
 %% Numerical Simulation (up to n branches)
 %
 numberofrealisations = 1; % number of sample paths
-T = 5e5; % end time for simulation
+T = 1e8; % end time for simulation
 % matrix to hold trait values at each timestep, for each realisation for
 % each branch
 traitHistories = cell(numberofrealisations,1);%starts  with 1 for 1 branch
 densityHistories = cell(numberofrealisations,1);
 timeHistories = cell(numberofrealisations,1);
 ws = warning('off','MATLAB:nearlySingularMatrix');%to stop flooding command window
-numberofpoints = min(T,5e4);%5;%
+numberofpoints = min(T,1e3);%5;%
 stride = max(1,floor((T+1)/numberofpoints)); %plot at most ~50000 time points
 numberofrows = floor(T/stride) + 1;
 for i = 1:numberofrealisations %Run numberofrealisations simulations
     traits=xinitial; %vector column of all current traits
     Nlist=N1(xinitial); %vector column of all current densities
+    Nnew=Nlist; %initial density
     time=0;
     j=1;
     branch = 1; %initially 1 branch only
@@ -437,36 +466,36 @@ for i = 1:numberofrealisations %Run numberofrealisations simulations
                     xplot(:,branch)=nan;
                     Nplot(:,branch)=nan;
                 end
+                Nnew = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma);%find new densities
+                %this method ensures the branch removed was the correct choice
+                %(one negative N means the eqm system is wrong not just that it should be removed)
+                removed = []; %traits of branches removed this step
+                for pass = 1:50 %cap on passes, in case near-twins flip back and forth
+                    while any(Nnew<=0) %checks if any branches died
+                        [~,w] = min(Nnew);              %remove only the most negative branch,
+                        removed = [removed; traits(w)]; %others may survive once it's gone
+                        traits(w) = [];
+                        Nnew = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma);%find new densities
+                    end
+                    if isempty(removed), break; end
+                    fitBack = arrayfun(@(z) fn(Nnew,z,traits), removed); %could a removed branch grow back?
+                    [fbest,w] = max(fitBack);
+                    if fbest <= 1e-6, break; end        %no (ignoring rounding-level twin cases)
+                    traits = [traits; removed(w)];      %yes: put it back and re-solve
+                    removed(w) = [];
+                    Nnew = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma);
+                end
+                while any(Nnew<=0) %checks if any branches died
+                    [~,w] = min(Nnew);              %remove only the most negative branch,
+                    traits(w) = [];
+                    Nnew = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma);%find new densities
+                end
             else %not mutual invasibility
                 traits = swappedtrait;%y replaces x
+                Nnew=Nswapped;
             end
         %else x doesn't change
         end
-        Nnew = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma);%find new densities
-        %this method ensures the branch removed was the correct choice
-        %(one negative N means the eqm system is wrong not just that it should be removed)
-        removed = []; %traits of branches removed this step
-        for pass = 1:50 %cap on passes, in case near-twins flip back and forth
-            while any(Nnew<=0) %checks if any branches died
-                [~,w] = min(Nnew);              %remove only the most negative branch,
-                removed = [removed; traits(w)]; %others may survive once it's gone
-                traits(w) = [];
-                Nnew = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma);%find new densities
-            end
-            if isempty(removed), break; end
-            fitBack = arrayfun(@(z) fn(Nnew,z,traits), removed); %could a removed branch grow back?
-            [fbest,w] = max(fitBack);
-            if fbest <= 1e-6, break; end        %no (ignoring rounding-level twin cases)
-            traits = [traits; removed(w)];      %yes: put it back and re-solve
-            removed(w) = [];
-            Nnew = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma);
-        end
-        while any(Nnew<=0) %checks if any branches died
-            [~,w] = min(Nnew);              %remove only the most negative branch,
-            traits(w) = [];
-            Nnew = Nn(traits,C1,C2,sigma1,sigma2,x0,sigma,beta,gamma);%find new densities
-        end
-        %
         Nlist = Nnew;
         time=time+1;%update timestep
         if mod(time,500000)==0, fprintf('\n %.3f',100*time/T); end %progress every 5000 steps
@@ -491,7 +520,7 @@ end
 
 %Plotting
 
-tol=0.1;
+tol=0.01;
 %merges traits closer than tol into one: density = sum, trait = density-weighted mean
 function [xc,Nc] = mergeClose(x,N,tol)
     [x,o] = sort(x(:)); N = N(o); N = N(:);
@@ -509,7 +538,7 @@ figure;
 hold on;
 cmap=jet;
 %plot trait value by time for each branch
-%{
+%
 for i=1:numberofrealisations
     X = traitHistories{i}; Nh = densityHistories{i}; t = timeHistories{i};
     tp = nan(numel(X),1); xp = tp; np = tp; c = 0; %preallocated, filled row by row
@@ -520,15 +549,15 @@ for i=1:numberofrealisations
         n = numel(xc);
         tp(c+1:c+n) = t(j); xp(c+1:c+n) = xc; np(c+1:c+n) = Nc; c = c+n;
     end
-    %scatter(tp(1:c),xp(1:c),4,log10(np(1:c)),"filled");
-    scatter(tp(1:c),xp(1:c),4,log10(np(1:c)./K(C1,C2,sigma1,sigma2,x0,xp(1:c))),"filled");
+    scatter(tp(1:c),xp(1:c),25,log10(np(1:c)),"filled");
+    %scatter(tp(1:c),xp(1:c),4,log10(np(1:c)./K(C1,C2,sigma1,sigma2,x0,xp(1:c))),"filled");
 end
 colormap("turbo");
 cb=colorbar;
-%cb.Label.String = "log(Density)";
-cb.Label.String = "log(Density/K)";
+cb.Label.String = "log_{10}(Density)";
+%cb.Label.String = "log(Density/K)";
 %}
-%
+%{
 for i=1:numberofrealisations
     traitHistory = traitHistories{i};
     timeHistory = timeHistories{i};
@@ -540,17 +569,38 @@ end
 %}
 %plots singular strategies
 hx1=yline(x0,'--',LineWidth=2);
-legend(Location="southwest")
-legend(hx1,sprintf('x* = x_0'))
+%legend(Location="northwest")
+%legend(hx1,sprintf('x* = x_0'))
 xlabel('Time');
 ylabel('Trait value');
 xlim([0 T]);
 %axis([0 T 0 max(x0+1,xinitial)]);
 grid on;
 axis square;
+
+%show value of s(x) and final derivative of each branch
+keep=~isnan(X(end,:));
+finalx=X(end,keep);
+finalN=Nh(end,keep);
+[finalx,o] = sort(finalx(:))
+finalN = finalN(o);
+finalN = finalN(:);
+secgradn(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,finalN,finalx)
+fityyn(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,finalN,finalx)
+
+[finalx,finalN] = mergeClose(finalx,finalN,tol);
+finalx
+secgradn(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,finalN,finalx)
+fityyn(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,finalN,finalx)
+
+opts = optimset('Display','off', 'TolX',1e-12, 'TolFun',1e-12, 'MaxIter',20000, 'MaxFunEvals',100000);
+sx = @(X) sxn_fun(X, r, sigma, beta, gamma, C1, C2, sigma1,sigma2, x0);
+S=fsolve(sx,finalx,opts)
+secgradn(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,finalN,finalx)
+fityyn(r,sigma,beta,gamma,C1,C2,sigma1,sigma2,x0,finalN,finalx)
 %}
 %% N/K by xi
-%
+%{
 figure;
 hold on;
 %k=11000;%170,350,600,2000,3000,4000,5000
